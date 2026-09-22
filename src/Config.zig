@@ -342,6 +342,10 @@ fn dumpValidator(_: Allocator, args: *std.process.Args.Iterator, target: *?DumpF
 
 pub const AiProvider = std.meta.Tag(zenai.provider.Client);
 
+/// Decision engine for `agent` one-shot tasks: a chat provider (default) or
+/// the in-process JEV policy (typed choices over the observed action space).
+pub const AgentPolicy = enum { llm, jev };
+
 /// Per-turn reasoning budget for `agent` mode, mirroring Claude's effort
 /// levels. Maps to each provider's native thinking/reasoning knob. Resolved
 /// in `Agent.init` (explicit flag > remembered > mode default), so there is
@@ -472,6 +476,8 @@ const Commands = cli.Builder(.{
             .{ .name = "effort", .type = ?Effort },
             .{ .name = "list_models", .type = bool },
             .{ .name = "no_llm", .type = bool },
+            .{ .name = "policy", .type = ?AgentPolicy },
+            .{ .name = "url", .type = ?[:0]const u8 },
         },
         .shared_options = CommonOptions,
     },

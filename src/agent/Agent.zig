@@ -34,6 +34,7 @@ const Candidate = zenai.provider.Candidate;
 const App = @import("../App.zig");
 const Conversation = @import("Conversation.zig");
 const Terminal = @import("Terminal.zig");
+const jev = @import("jev.zig");
 const SlashCommand = @import("SlashCommand.zig");
 const settings = @import("settings.zig");
 const auth = @import("auth/auth.zig");
@@ -160,6 +161,8 @@ model: []u8,
 effort: Config.Effort,
 script_file: ?[]const u8,
 one_shot_task: ?[]const u8,
+policy: Config.AgentPolicy,
+start_url: ?[]const u8,
 one_shot_save: ?[]const u8,
 one_shot_attachments: ?[]const []const u8,
 cancel_requested: std.atomic.Value(bool) = .init(false),
@@ -243,7 +246,10 @@ pub fn init(allocator: std.mem.Allocator, app: *App, opts: Config.Agent) !*Agent
     // null provider. Without it the REPL accepts natural language, so an absent
     // API key would only surface at the first non-slash-command line — too late.
     // Pure JavaScript script runs stay allowed: no REPL, no LLM.
-    const requires_llm = is_one_shot or (will_repl and !opts.no_llm and !remembered_no_llm);
+    const is_jev = opts.policy == .jev;
+    // The JEV policy needs no chat provider; its key is TYPESAFE_API_KEY,
+    // checked when the loop runs.
+    const requires_llm = (is_one_shot and !is_jev) or (will_repl and !opts.no_llm and !remembered_no_llm);
 
     // Skip resolve when no client is wanted — else resolveCredentials prints
     // "No API key detected" for a run that does not need one.
@@ -321,6 +327,8 @@ pub fn init(allocator: std.mem.Allocator, app: *App, opts: Config.Agent) !*Agent
         .stream_enabled = stream_enabled,
         .script_file = opts.script_file,
         .one_shot_task = opts.task,
+        .policy = opts.policy orelse .llm,
+        .start_url = opts.url,
         .one_shot_save = opts.save,
         .one_shot_attachments = if (opts.attach.items.len == 0) null else opts.attach.items,
         .available_providers = available_providers,
@@ -500,6 +508,18 @@ const TurnInput = struct {
 /// Returns true on success.
 pub fn run(self: *Agent) bool {
     if (self.one_shot_task) |task| {
+        if (self.policy == .jev) {
+            const start = self.start_url orelse {
+                self.terminal.printInfo("--policy jev needs --url (the page the goal starts from).", .{});
+                return false;
+            };
+            var arena_state = std.heap.ArenaAllocator.init(self.allocator);
+            defer arena_state.deinit();
+            return jev.run(arena_state.allocator(), &self.ts, &self.terminal, task, start) catch |err| {
+                self.terminal.printInfo("jev policy failed: {s}", .{@errorName(err)});
+                return false;
+            };
+        }
         const saving = self.one_shot_save != null;
         const ok = self.runTurn(.{
             .prompt = task,

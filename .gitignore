@@ -8,3 +8,6 @@ zig-out
 lightpanda.id
 /src/rust/target/
 src/snapshot.bin
+
+# local toolchain
+.tools/

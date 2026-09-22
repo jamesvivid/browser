@@ -59,6 +59,27 @@ model's word alone.
 | `src/Config.zig` | `--policy` flag; `TYPESAFE_API_KEY` in the env-key list |
 | `src/browser/tools.zig` | unchanged — consumed, not modified |
 
+## Measured (2026-09-22, Apple silicon, this fork, cold start each run)
+
+Task: open the discussion page of HN's top story; stop when visible.
+
+| Arm | Wall | Model calls | Tokens |
+| --- | ---: | ---: | ---: |
+| in-process `--policy jev` | **3.4–4.1 s** | **2 SystemOne** | ~4k |
+| in-process LLM agent (gpt-5-mini, effort low) | 19.4 s | ~9 chat turns | 53k (48k cached) |
+| external jev-ultrafast over CDP (reference) | 1.6 s loop-only, browser pre-warm | 2 SystemOne | ~4k |
+
+Same binary, same task, cold start: the JEV policy is ~5x faster than the chat
+agent and roughly two orders of magnitude cheaper in tokens. The external arm's
+loop-only number excludes browser startup; the in-process arm's includes
+process start, both navigations, and both model round trips.
+
+Two engine-side limits surfaced and were handled per the TypeSafe docs: the
+255-choice cap (criteria now deduplicate by label, capped at 120) and
+`max_tokens_exceeded` on dense pages (state text 1600 chars, element lists
+capped). First cut is click-only: TYPE_TEXT routing to a chat provider and
+native selects are the next increments.
+
 ## Measurement (the point of the exercise)
 
 Same task, three arms, reported side by side:
